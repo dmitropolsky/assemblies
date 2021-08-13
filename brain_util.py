@@ -3,7 +3,6 @@ import numpy as np
 import random
 import copy
 import pickle
-import matplotlib.pyplot as plt
 
 from collections import OrderedDict
 

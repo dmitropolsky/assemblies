@@ -237,7 +237,7 @@ def merge_sim(n=100000,k=317,p=0.01,beta=0.05,max_t=50):
 	for i in xrange(max_t-1):
 		b.project({"stimA":["A"],"stimB":["B"]},
 			{"A":["A","C"],"B":["B","C"],"C":["C","A","B"]})
-	return b.areas["C"].saved_w
+	return b.areas["A"].saved_w, b.areas["B"].saved_w, b.areas["C"].saved_w
 
 def merge_beta_sim(n=100000,k=317,p=0.01,t=100):
 	results = {}
@@ -400,3 +400,51 @@ def plot_density_ee(show=True,save="",use_text_font=True):
 		plt.show()
 	if not show and save != "":
 		plt.savefig(save)
+
+
+# For default values, first B->A gets only 25% of A's original assembly
+# After subsequent recurrent firings restore up to 42% 
+# With artificially high beta, can get 100% restoration.
+def fixed_assembly_recip_proj(n=100000, k=317, p=0.01, beta=0.05):
+	b = brain.Brain(p, save_winners=True)
+	b.add_stimulus("stimA",k)
+	b.add_area("A",n,k,beta)
+	# Will project fixes A into B
+	b.add_area("B",n,k,beta)
+	b.project({"stimA":["A"]},{})
+	print("A.w=" + str(b.areas["A"].w))
+	for i in xrange(20):
+		b.project({"stimA":["A"]}, {"A":["A"]})
+		print("A.w=" + str(b.areas["A"].w))
+	# Freeze assembly in A and start projecting A <-> B
+	b.areas["A"].fix_assembly()
+	b.project({}, {"A":["B"]})
+	for i in xrange(20):
+		b.project({}, {"A":["B"], "B":["A","B"]})
+		print("B.w=" + str(b.areas["B"].w))
+	# If B has stabilized, this implies that the A->B direction is stable.
+	# Therefore to test that this "worked" we should check that B->A restores A
+	print("Before B->A, A.w=" + str(b.areas["A"].w))
+	b.areas["A"].unfix_assembly()
+	b.project({},{"B":["A"]})
+	print("After B->A, A.w=" + str(b.areas["A"].w))
+	for i in xrange(20):
+		b.project({}, {"B":["A"],"A":["A"]})
+		print("A.w=" + str(b.areas["A"].w))
+	overlaps = bu.get_overlaps(b.areas["A"].saved_winners[-22:],0,percentage=True)
+	print(overlaps)
+
+
+def fixed_assembly_merge(n=100000, k=317, p=0.01, beta=0.05):
+	b = brain.Brain(p)
+	b.add_stimulus("stimA",k)
+	b.add_stimulus("stimB",k)
+	b.add_area("A",n,k,beta)
+	b.add_area("B",n,k,beta)
+	b.add_area("C",n,k,beta)
+	b.project({"stimA":["A"], "stimB":["B"]},{})
+	for i in xrange(20):
+		b.project({"stimA":["A"], "stimB":["B"]},
+			{"A":["A"], "B":["B"]})
+	b.areas["A"].fix_assembly()
+	b.areas["B"].fix_assembly()

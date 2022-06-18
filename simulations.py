@@ -1,5 +1,5 @@
 # Default simulation library containing:
-# - Basic projection simulations (convergence for different beta, etc)
+# - Basic [project]ion simulations (convergence for different beta, etc)
 # - Merge simulations (different betas)
 # - Pattern completion simulations
 # - Association simulations

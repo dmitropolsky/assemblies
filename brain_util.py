@@ -16,8 +16,12 @@ def sim_load(file_name):
 		return pickle.load(f)
 
 # Compute item overlap between two lists viewed as sets.
-def overlap(a,b):
-	return len(set(a) & set(b))
+def overlap(a,b,percentage=False):
+	o = len(set(a) & set(b))
+	if percentage:
+		return (float(o)/float(len(b)))
+	else:
+		return o
 
 # Compute overlap of each list of winners in winners_list 
 # with respect to a specific winners set, namely winners_list[base]

@@ -1,9 +1,11 @@
 #! /usr/bin/python3.9
+# DOWNLOADED FROM https://github.com/dmitropolsky/assemblies
 import numpy as np
 import heapq
 from collections import defaultdict
 from scipy.stats import binom
 from scipy.stats import truncnorm
+from scipy.stats import norm
 import math
 import random
 
@@ -73,6 +75,8 @@ class Brain:
 		self.save_winners = save_winners
 		# For debugging purposes in applications (eg. language)
 		self.no_plasticity = False
+		self.no_print=False
+		self.use_normal_ppf=False
 
 	def add_stimulus(self, name, k):
 		self.stimuli[name] = Stimulus(k)
@@ -100,11 +104,13 @@ class Brain:
 			new_connectomes[key] = np.empty((0, other_area_size))
 			if key != name:
 				self.connectomes[key][name] = np.empty((other_area_size, 0))
+			# by default use beta for plasticity of synapses from this area to other areas
+			# by default use other area's beta for synapses from other area to this area
 			self.areas[key].area_beta[name] = self.areas[key].beta
 			self.areas[name].area_beta[key] = beta
 		self.connectomes[name] = new_connectomes
 
-	def add_explicit_area(self, name, n, k, beta):
+	def add_explicit_area(self, name, n, k, beta, custom_inner_p=None, custom_out_p=None, custom_in_p=None):
 		self.areas[name] = Area(name, n, k, beta)
 		self.areas[name].explicit = True
 
@@ -112,16 +118,33 @@ class Brain:
 			stim_connectomes[name] = np.random.binomial(self.stimuli[stim_name].k, self.p, size=(n)) * 1.0
 			self.areas[name].stimulus_beta[stim_name] = beta
 
+		if custom_inner_p:
+			inner_p = custom_inner_p
+		else:
+			inner_p = self.p
+
+		if custom_in_p:
+			in_p = custom_in_p
+		else:
+			in_p = self.p
+
+		if custom_out_p:
+			out_p = custom_out_p
+		else:
+			out_p = self.p 
+
 		new_connectomes = {}
 		for key in self.areas:
 			if key == name:  # create explicitly
-				new_connectomes[key] = np.random.binomial(1, self.p, size=(n,n)) * 1.0
+				new_connectomes[key] = np.random.binomial(1, inner_p, size=(n,n)) * 1.0
 			if key != name:  
 				if self.areas[key].explicit:
 					other_n = self.areas[key].n
-					new_connectomes[key] = np.random.binomial(1, self.p, size=(n, other_n)) * 1.0
-					self.connectomes[key][name] = np.random.binomial(1, self.p, size=(other_n, n)) * 1.0
+					new_connectomes[key] = np.random.binomial(1, out_p, size=(n, other_n)) * 1.0
+					self.connectomes[key][name] = np.random.binomial(1, in_p, size=(other_n, n)) * 1.0
 				else: # we will fill these in on the fly
+					# TODO: if explicit area added late, this will not work
+					# But out_p to a non-explicit area must be default p, for fast sampling to work
 					new_connectomes[key] = np.empty((n,0))
 					self.connectomes[key][name] = np.empty((0,n))
 			self.areas[key].area_beta[name] = self.areas[key].beta
@@ -130,18 +153,28 @@ class Brain:
 		# Explicitly set w to n so that all computations involving this area are explicit.
 		self.areas[name].w = n
 
+	def update_plasticity(self, from_area, to_area, new_beta):
+		self.areas[to_area].area_beta[from_area] = new_beta
+
 	def update_plasticities(self, area_update_map={}, stim_update_map={}):
 		# area_update_map consists of area1: list[ (area2, new_beta) ]
 		# represents new plasticity FROM area2 INTO area1
 		for to_area, update_rules in area_update_map.items():
 			for (from_area, new_beta) in update_rules: 
-				self.areas[to_area].area_beta[from_area] = new_beta
+				self.update_plasticity(from_area, to_area, new_beta)
 
 		# stim_update_map consists of area: list[ (stim, new_beta) ]f
 		# represents new plasticity FROM stim INTO area
 		for area, update_rules in stim_update_map.items():
 			for (stim, new_beta) in update_rules:
 				self.areas[area].stimulus_beta[stim] = new_beta
+
+	def activate(self, area_name, index):
+		area = self.areas[area_name]
+		k = area.k 
+		assembly_start = k*index
+		area.winners = list(range(assembly_start, assembly_start+k))
+		area.fix_assembly()
 
 	def project(self, stim_to_area, area_to_area, verbose=False):
 		# Validate stim_area, area_area well defined
@@ -191,7 +224,8 @@ class Brain:
 	# k top of previous winners and potential new winners
 	# if new winners > 0, redo connectome and intra_connectomes 
 	# have to wait to replace new_winners
-		print("Projecting " + ",".join(from_stimuli) + " and " + ",".join(from_areas) + " into " + area.name)
+		if not self.no_print:
+			print("Projecting " + ",".join(from_stimuli) + " and " + ",".join(from_areas) + " into " + area.name)
 
 		# If projecting from area with no assembly, complain.
 		for from_area in from_areas:
@@ -219,10 +253,17 @@ class Brain:
 			total_k = 0
 			input_sizes = []
 			num_inputs = 0
+			normal_approx_mean = 0.0 
+			normal_approx_var = 0.0
 			for stim in from_stimuli:
-				total_k += self.stimuli[stim].k
-				input_sizes.append(self.stimuli[stim].k)
+				local_k = self.stimuli[stim].k
+				total_k += local_k
+				input_sizes.append(local_k)
 				num_inputs += 1
+				if self.use_normal_ppf:
+					local_p = self.custom_stim_p[stim][name]
+					normal_approx_mean += local_k * local_p
+					normal_approx_var += ((local_k * local_p * (1-p)) ** 2)
 			for from_area in from_areas:
 				#if self.areas[from_area].w < self.areas[from_area].k:
 				#	raise ValueError("Area " + from_area + "does not have enough support.")
@@ -230,20 +271,35 @@ class Brain:
 				total_k += effective_k
 				input_sizes.append(effective_k)
 				num_inputs += 1
+				if self.use_normal_ppf:
+					local_p = self.custom_stim_p[from_area][name]
+					normal_approx_mean += effective_k * local_p
+					normal_approx_var += ((effective_k * local_p * (1-p)) ** 2)
 
 			if verbose:
 				print("total_k = " + str(total_k) + " and input_sizes = " + str(input_sizes))
 
 			effective_n = area.n - area.w
 			# Threshold for inputs that are above (n-k)/n percentile.
-			# self.p can be changed to have a custom connectivity into thi sbrain area.
-			alpha = binom.ppf((float(effective_n-area.k)/effective_n), total_k, self.p)
+			percentage = (float(effective_n-area.k)/effective_n)
+			if self.use_normal_ppf:
+				# each normal approximation is N(n*p, n*p*(1-p))
+				normal_approx_std = math.sqrt(normal_approx_var)
+				alpha = binom.ppf(percentage, loc=normal_approx_mean, scale=normal_approx_std)
+			else:
+				# self.p can be changed to have a custom connectivity into this brain area
+				# but all incoming areas' p must be the same
+				alpha = binom.ppf(percentage, total_k, self.p)
 			if verbose:
 				print("Alpha = " + str(alpha))
 			# use normal approximation, between alpha and total_k, round to integer
 			# create k potential_new_winners
-			std = math.sqrt(total_k * self.p * (1.0-self.p))
-			mu = total_k * self.p
+			if self.use_normal_ppf:
+				mu = normal_approx_mean
+				std = normal_approx_std
+			else:
+				mu = total_k * self.p
+				std = math.sqrt(total_k * self.p * (1.0-self.p))
 			a = float(alpha - mu) / std
 			b = float(total_k - mu) / std
 			potential_new_winners = truncnorm.rvs(a, b, scale=std, size=area.k)
@@ -271,7 +327,7 @@ class Brain:
 			for i in range(area.k):
 				if new_winner_indices[i] >= area.w:
 					first_winner_inputs.append(potential_new_winners[new_winner_indices[i] - area.w])
-					new_winner_indices[i] = area.w+ num_first_winners
+					new_winner_indices[i] = area.w + num_first_winners
 					num_first_winners += 1
 		area.new_winners = new_winner_indices
 		area.new_w = area.w + num_first_winners

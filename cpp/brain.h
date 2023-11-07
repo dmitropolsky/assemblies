@@ -1,5 +1,5 @@
-#ifndef EXPERIMENTAL_USERS_SZABADKA_NEMO_BRAIN_H_
-#define EXPERIMENTAL_USERS_SZABADKA_NEMO_BRAIN_H_
+#ifndef NEMO_BRAIN_H_
+#define NEMO_BRAIN_H_
 
 #include <stdint.h>
 
@@ -85,4 +85,4 @@ class Brain {
 
 }  // namespace nemo
 
-#endif // EXPERIMENTAL_USERS_SZABADKA_NEMO_BRAIN_H_
+#endif // NEMO_BRAIN_H_

@@ -110,41 +110,33 @@ class Brain:
 			self.areas[name].area_beta[key] = beta
 		self.connectomes[name] = new_connectomes
 
+	# TODO: custom out_p of explicit areas not fully implemented when firing into regular areas (into explicit areas OK)
 	def add_explicit_area(self, name, n, k, beta, custom_inner_p=None, custom_out_p=None, custom_in_p=None):
 		self.areas[name] = Area(name, n, k, beta)
 		self.areas[name].explicit = True
 
 		for stim_name, stim_connectomes in self.stimuli_connectomes.items():
-			stim_connectomes[name] = np.random.binomial(self.stimuli[stim_name].k, self.p, size=(n)) * 1.0
+			stim_connectomes[name] = np.random.binomial(self.stimuli[stim_name].k, self.p, size=(n)) 
 			self.areas[name].stimulus_beta[stim_name] = beta
 
-		if custom_inner_p:
-			inner_p = custom_inner_p
-		else:
-			inner_p = self.p
-
-		if custom_in_p:
-			in_p = custom_in_p
-		else:
-			in_p = self.p
-
-		if custom_out_p:
-			out_p = custom_out_p
-		else:
-			out_p = self.p 
+		self.areas[name].inner_p = (custom_inner_p if custom_inner_p else self.p)
+		# TODO: custom out_p of explicit areas not fully implemented when firing into regular areas (into explicit areas OK)
+		self.areas[name].out_p = (custom_out_p if custom_out_p else self.p)
+		self.areas[name].in_p = (custom_in_p if custom_in_p else self.p)
 
 		new_connectomes = {}
 		for key in self.areas:
 			if key == name:  # create explicitly
-				new_connectomes[key] = np.random.binomial(1, inner_p, size=(n,n)) * 1.0
+				new_connectomes[key] = np.random.binomial(1, self.areas[name].inner_p, size=(n,n)) * 1.0
 			if key != name:  
 				if self.areas[key].explicit:
 					other_n = self.areas[key].n
-					new_connectomes[key] = np.random.binomial(1, out_p, size=(n, other_n)) * 1.0
-					self.connectomes[key][name] = np.random.binomial(1, in_p, size=(other_n, n)) * 1.0
+					new_connectomes[key] = np.random.binomial(1, self.areas[name].out_p, size=(n, other_n)) * 1.0
+					self.connectomes[key][name] = np.random.binomial(1, self.areas[name].in_p, size=(other_n, n)) * 1.0
 				else: # we will fill these in on the fly
-					# TODO: if explicit area added late, this will not work
-					# But out_p to a non-explicit area must be default p, for fast sampling to work
+					# TODO: if explicit area added late (that is, after firing into a regular area has occurred) this will not work
+					# Connectome between explicit / regular is empty before any firings to the regular area.
+					# For now, out_p to a non-explicit area must be default p, for fast sampling to work
 					new_connectomes[key] = np.empty((n,0))
 					self.connectomes[key][name] = np.empty((0,n))
 			self.areas[key].area_beta[name] = self.areas[key].beta
@@ -152,6 +144,8 @@ class Brain:
 		self.connectomes[name] = new_connectomes
 		# Explicitly set w to n so that all computations involving this area are explicit.
 		self.areas[name].w = n
+
+		print("GOT HERE")
 
 	def update_plasticity(self, from_area, to_area, new_beta):
 		self.areas[to_area].area_beta[from_area] = new_beta
@@ -382,9 +376,13 @@ class Brain:
 				print(self.stimuli_connectomes[stim][name])
 			m += 1
 
-		# !!!!!!!!!!!!!!!!
-		# BIG TO DO: Need to update connectomes for stim that are NOT in from_stimuli
-		# For example, if last round fired areas A->B, and stim has never been fired into B.
+		for stim_name, stim_connectomes in self.stimuli_connectomes.items():
+			if stim_name in from_stimuli:
+				continue 
+			if num_first_winners > 0:
+				stim_connectomes[name] = np.resize(stim_connectomes[name], area.w + num_first_winners)
+			for i in range(num_first_winners):
+				stim_connectomes[name][area.w + i] = np.random.binomial(1, self.p)
 
 		# connectome for each in_area->area
 			# add num_first_winners columns
@@ -429,7 +427,8 @@ class Brain:
 			columns = (self.connectomes[name][other_area]).shape[1]
 			for i in range(area.w, area.new_w):
 				for j in range(columns):
-					self.connectomes[name][other_area][i][j] = np.random.binomial(1, self.p)
+					other_area_in_p = self.areas[other_area].in_p if self.areas[other_area].explicit else self.p
+					self.connectomes[name][other_area][i][j] = np.random.binomial(1, other_area_in_p)
 			if verbose:
 				print("Connectome of " + name + " to " + other_area + " is now:")
 				print(self.connectomes[name][other_area])

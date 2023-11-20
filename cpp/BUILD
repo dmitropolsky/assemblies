@@ -1,7 +1,10 @@
 cc_library(
     name = "brain",
     srcs = ["brain.cc"],
-    hdrs = ["brain.h"],
+    hdrs = [
+        "brain.h",
+        "brain_util.h",
+    ],
     deps = [],
 )
 

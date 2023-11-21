@@ -408,21 +408,21 @@ class ParserBrain(brain.Brain):
 						continue
 					if len(self.area_states[area2]) == 0:
 						if len(self.fiber_states[area1][area2]) == 0:
-							if self.areas[area1].winners:
+							if self.area_by_name[area1].winners:
 								proj_map[area1].add(area2)
-							if self.areas[area2].winners:
+							if self.area_by_name[area2].winners:
 								proj_map[area2].add(area2)
 		return proj_map
 
 	def activateWord(self, area_name, word):
-		area = self.areas[area_name]
+		area = self.area_by_name[area_name]
 		k = area.k
 		assembly_start = self.lexeme_dict[word]["index"]*k
 		area.winners = list(range(assembly_start, assembly_start+k))
 		area.fix_assembly()
 
 	def activateIndex(self, area_name, index):
-		area = self.areas[area_name]
+		area = self.area_by_name[area_name]
 		k = area.k
 		assembly_start = index*k
 		area.winners = list(range(assembly_start, assembly_start+k))
@@ -432,10 +432,10 @@ class ParserBrain(brain.Brain):
 		return self.getWord(area_name, 0.7)
 
 	def getWord(self, area_name, min_overlap=0.7):
-		if not self.areas[area_name].winners:
+		if not self.area_by_name[area_name].winners:
 			raise Exception("Cannot get word because no assembly in " + area_name)
-		winners = set(self.areas[area_name].winners)
-		area_k = self.areas[area_name].k
+		winners = set(self.area_by_name[area_name].winners)
+		area_k = self.area_by_name[area_name].k
 		threshold = min_overlap * area_k
 		for word, lexeme in self.lexeme_dict.items():
 			word_index = lexeme["index"]
@@ -545,8 +545,8 @@ class EnglishParserBrain(ParserBrain):
 		if word:
 			return word
 		if not word and area_name == DET:
-			winners = set(self.areas[area_name].winners)
-			area_k = self.areas[area_name].k
+			winners = set(self.area_by_name[area_name].winners)
+			area_k = self.area_by_name[area_name].k
 			threshold = min_overlap * area_k
 			nodet_index = DET_SIZE - 1
 			nodet_assembly_start = nodet_index * area_k
@@ -579,11 +579,11 @@ class ParserDebugger():
 	def peak(self):
 		remove_map = defaultdict(int)
 		# Temporarily set beta to 0
-		self.b.no_plasticity = True
+		self.b.disable_plasticity = True
 		self.b.save_winners = True
 
 		for area in self.all_areas:
-			self.b.areas[area].unfix_assembly()
+			self.b.area_by_name[area].unfix_assembly()
 		while True:
 			test_proj_map_string = input("DEBUGGER: enter projection map, eg. {\"VERB\": [\"LEX\"]}, or ENTER to quit\n")
 			if not test_proj_map_string:
@@ -594,8 +594,8 @@ class ParserDebugger():
 			for _, to_area_list in test_proj_map.items():
 				for to_area in to_area_list:
 					to_area_set.add(to_area)
-					if not self.b.areas[to_area].saved_winners:
-						self.b.areas[to_area].saved_winners.append(self.b.areas[to_area].winners)
+					if not self.b.area_by_name[to_area].saved_winners:
+						self.b.area_by_name[to_area].saved_winners.append(self.b.area_by_name[to_area].winners)
 
 			for to_area in to_area_set:
 				remove_map[to_area] += 1
@@ -611,20 +611,20 @@ class ParserDebugger():
 				continue
 			for print_area in print_assemblies.split(","):
 				print("DEBUGGER: Printing assembly in area " + print_area)
-				print(str(self.b.areas[print_area].winners))
+				print(str(self.b.area_by_name[print_area].winners))
 				if print_area in self.explicit_areas:
 					word = self.b.interpretAssemblyAsString(print_area)
 					print("DEBUGGER: in explicit area got assembly = " + word)
 
 		# Restore assemblies (winners) and w values to before test projections
 		for area, num_test_projects in remove_map.items():
-			self.b.areas[area].winners = self.b.areas[area].saved_winners[0]
-			self.b.areas[area].w = self.b.areas[area].saved_w[-num_test_projects - 1]
-			self.b.areas[area].saved_w = self.b.areas[area].saved_w[:(-num_test_projects)]
-		self.b.no_plasticity = False
+			self.b.area_by_name[area].winners = self.b.area_by_name[area].saved_winners[0]
+			self.b.area_by_name[area].w = self.b.area_by_name[area].saved_w[-num_test_projects - 1]
+			self.b.area_by_name[area].saved_w = self.b.area_by_name[area].saved_w[:(-num_test_projects)]
+		self.b.disable_plasticity = False
 		self.b.save_winners = False
 		for area in self.all_areas:
-			self.b.areas[area].saved_winners = []
+			self.b.area_by_name[area].saved_winners = []
 
 	
 
@@ -696,7 +696,7 @@ def parseHelper(b, sentence, p, LEX_k, project_rounds, verbose, debug,
 		b.activateWord(LEX, word)
 		if verbose:
 			print("Activated word: " + word)
-			print(b.areas[LEX].winners)
+			print(b.area_by_name[LEX].winners)
 
 		for rule in lexeme["PRE_RULES"]:
 			b.applyRule(rule)
@@ -704,12 +704,12 @@ def parseHelper(b, sentence, p, LEX_k, project_rounds, verbose, debug,
 		proj_map = b.getProjectMap()
 		for area in proj_map:
 			if area not in proj_map[LEX]:
-				b.areas[area].fix_assembly()
+				b.area_by_name[area].fix_assembly()
 				if verbose:
 					print("FIXED assembly bc not LEX->this area in: " + area)
 			elif area != LEX:
-				b.areas[area].unfix_assembly()
-				b.areas[area].winners = []
+				b.area_by_name[area].unfix_assembly()
+				b.area_by_name[area].winners = []
 				if verbose:
 					print("ERASED assembly because LEX->this area in " + area)
 
@@ -732,8 +732,8 @@ def parseHelper(b, sentence, p, LEX_k, project_rounds, verbose, debug,
 		#	print("Done projecting for this round")
 		#	for area_name in all_areas:
 		#		print("Post proj stats for " + area_name)
-		#		print("w=" + str(b.areas[area_name].w))
-		#		print("num_first_winners=" + str(b.areas[area_name].num_first_winners))
+		#		print("w=" + str(b.area_by_name[area_name].w))
+		#		print("num_first_winners=" + str(b.area_by_name[area_name].num_first_winners))
 
 		for rule in lexeme["POST_RULES"]:
 			b.applyRule(rule)
@@ -745,9 +745,9 @@ def parseHelper(b, sentence, p, LEX_k, project_rounds, verbose, debug,
 
 	# Readout
 	# For all readout methods, unfix assemblies and remove plasticity.
-	b.no_plasticity = True
+	b.disable_plasticity = True
 	for area in all_areas:
-		b.areas[area].unfix_assembly()
+		b.area_by_name[area].unfix_assembly()
 
 	dependencies = []
 	def read_out(area, mapping):

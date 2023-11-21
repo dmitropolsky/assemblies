@@ -1,4 +1,4 @@
-import brain
+import brain_alt
 import brain_util as bu
 import numpy as np
 import random
@@ -164,10 +164,10 @@ def single_word_tutoring_exp(lex_size_start, lex_size_end, p=0.05, LEX_k=50, LEX
 	return results
 
 
-class LearnBrain(brain.Brain):
+class LearnBrain(brain_alt.Brain):
 	def __init__(self, p, PHON_k=100, CONTEXTUAL_k=100, EXPLICIT_k=100, LEX_k=100, LEX_n=10000, beta=0.06, proj_rounds=2,
 		CORE_k=10, bilingual=False, LANG_k=100, num_nouns=2, num_verbs=2, extra_context_areas=0, extra_context_area_k=10, extra_context_model="B", extra_context_delay=0):
-		brain.Brain.__init__(self, p)
+		brain_alt.Brain.__init__(self, p)
 		self.bilingual = bilingual
 
 		# make this sum of #verbs + #nouns, more easily adjustable
@@ -277,16 +277,16 @@ class LearnBrain(brain.Brain):
 	def project_star(self, mutual_inhibition=False):
 		# compute the initial (t=1) project map; NOUN and VERB do not yet have any winners
 		project_map = {PHON: [NOUN, VERB]}
-		if self.areas[MOTOR].winners:
+		if self.area_by_name[MOTOR].winners:
 			project_map[MOTOR] = [VERB]
-		if self.areas[VISUAL].winners:
+		if self.area_by_name[VISUAL].winners:
 			project_map[VISUAL] = [NOUN]
 		if self.bilingual:
 			project_map[LANG] = [NOUN, VERB]
 		if self.extra_context_areas:
 			for i in range(self.extra_context_areas):
 				extra_context_area_name = self.get_extra_context_area_name(i)
-				if self.areas[extra_context_area_name].winners:
+				if self.area_by_name[extra_context_area_name].winners:
 					project_map[extra_context_area_name] = [NOUN, VERB]
 					print("PROJECTING FROM EXTRA AREA " + str(extra_context_area_name))
 		self.project({}, project_map)
@@ -295,9 +295,9 @@ class LearnBrain(brain.Brain):
 		# for subsequent rounds, now include recurrent firing + firing from NOUN/VERB
 		project_map[NOUN] = [PHON, NOUN]
 		project_map[VERB] = [PHON, VERB]
-		if self.areas[MOTOR].winners:
+		if self.area_by_name[MOTOR].winners:
 			project_map[VERB] += [MOTOR]
-		if self.areas[VISUAL].winners:
+		if self.area_by_name[VISUAL].winners:
 			project_map[NOUN] += [VISUAL]
 
 		if mutual_inhibition:
@@ -371,12 +371,12 @@ class LearnBrain(brain.Brain):
 		self.sentences_parsed += 1
 
 	def clear_context_winners(self):
-		self.areas[VISUAL].winners = []
-		self.areas[MOTOR].winners = []
+		self.area_by_name[VISUAL].winners = []
+		self.area_by_name[MOTOR].winners = []
 		if self.extra_context_areas > 0:
 			for i in range(self.extra_context_areas):
 				extra_context_area_name = self.get_extra_context_area_name(i)
-				self.areas[extra_context_area_name].winners = []
+				self.area_by_name[extra_context_area_name].winners = []
 
 	def train_simple(self, rounds):
 		sentence_1 = [CAT, JUMP]
@@ -414,6 +414,8 @@ class LearnBrain(brain.Brain):
 		print("Did not succeed after " + str(max_rounds) + " rounds.")
 		return None
 
+# l = learner.LearnBrain(0.05, LEX_k=50, LEX_n=100000, num_nouns=2, num_verbs=2, beta=0.06)
+# train_experiment_randomized()
 	def train_experiment_randomized(self, max_samples=500, increment=1, start_testing=0, use_extra_context=False):
 		#self.extra_context_areas = 0
 		for i in range(0, max_samples):
@@ -449,10 +451,10 @@ class LearnBrain(brain.Brain):
 		return True
 
 	def get_explicit_assembly(self, area_name, min_overlap=0.75):
-		if not self.areas[area_name].winners:
+		if not self.area_by_name[area_name].winners:
 			raise Exception("Cannot get word because no assembly in " + area_name)
-		winners = set(self.areas[area_name].winners)
-		area = self.areas[area_name]
+		winners = set(self.area_by_name[area_name].winners)
+		area = self.area_by_name[area_name]
 		area_k = area.k
 		threshold = min_overlap * area_k
 		num_assemblies = int(area.n / area.k)
@@ -471,8 +473,8 @@ class LearnBrain(brain.Brain):
 				return word
 
 	def test_verb(self, word, min_overlap=0.75):
-		self.no_plasticity = True
-		self.areas[PHON].unfix_assembly()
+		self.disable_plasticity = True
+		self.area_by_name[PHON].unfix_assembly()
 		self.activate_context(word)
 		if self.bilingual:
 			self.activate_lang(word)
@@ -482,28 +484,28 @@ class LearnBrain(brain.Brain):
 			first_proj_map[LANG] = [VERB]
 		self.project({}, first_proj_map)
 		self.project({}, {VERB: [PHON]})
-		self.no_plasticity = False
+		self.disable_plasticity = False
 		return self.get_PHON(min_overlap)
 
 	def testIndexedWord(self, word_index, min_overlap=0.75, use_extra_context=False, no_print=False):
-		self.no_plasticity = True
-		self.areas[PHON].unfix_assembly()
+		self.disable_plasticity = True
+		self.area_by_name[PHON].unfix_assembly()
 		self.activate_index_context(word_index, use_extra_context)
 		area = self.get_index_context_area(word_index)
 		to_area = self.get_index_lexical_area(word_index)
 		self.project({}, {area: [to_area]})
 		self.project({}, {to_area: [PHON]})
-		self.no_plasticity = False
+		self.disable_plasticity = False
 		out = self.get_explicit_assembly(PHON, min_overlap)
 		if not no_print:
 			print("For word " + str(word_index) + " got output " + str(out))
 		self.clear_context_winners()
-		self.no_plasticity = False
+		self.disable_plasticity = False
 		return out
 
 	def test_noun(self, word, min_overlap=0.75):
-		self.no_plasticity = True
-		self.areas[PHON].unfix_assembly()
+		self.disable_plasticity = True
+		self.area_by_name[PHON].unfix_assembly()
 		self.activate_context(word)
 		if self.bilingual:
 			self.activate_lang(word)
@@ -513,12 +515,12 @@ class LearnBrain(brain.Brain):
 			first_proj_map[LANG] = [NOUN]
 		self.project({}, first_proj_map)
 		self.project({}, {NOUN: [PHON]})
-		self.no_plasticity = False
+		self.disable_plasticity = False
 		return self.get_PHON(min_overlap)
 
 	def get_input_from(self, from_area, to_area):
-		from_winner_indices = self.areas[from_area].winners
-		to_winner_indices = self.areas[to_area].winners 
+		from_winner_indices = self.area_by_name[from_area].winners
+		to_winner_indices = self.area_by_name[to_area].winners 
 		if (not from_winner_indices) or (not to_winner_indices):
 			return 0
 		total_input = ((self.connectomes[from_area][to_area])[from_winner_indices][:,to_winner_indices]).sum()
@@ -535,7 +537,7 @@ class LearnBrain(brain.Brain):
 
 	# property Q test
 	def test_word(self, word):
-		self.no_plasticity = True
+		self.disable_plasticity = True
 		self.activate_PHON(word)
 		self.project({}, {PHON: [VERB, NOUN]})
 		# compare inputs into both 
@@ -549,22 +551,22 @@ class LearnBrain(brain.Brain):
 		print("Got input into NOUN = " + str(noun_sum))
 
 		print("Firing NOUN and VERB recurrently, and computing overlap of winners at (t+1) with t")
-		noun_winners = self.areas[NOUN].winners[:]
-		verb_winners = self.areas[VERB].winners[:]
+		noun_winners = self.area_by_name[NOUN].winners[:]
+		verb_winners = self.area_by_name[VERB].winners[:]
 		self.project({}, {"NOUN": ["NOUN"], "VERB": ["VERB"]})
-		noun_overlap = bu.overlap(noun_winners, self.areas[NOUN].winners)
-		verb_overlap = bu.overlap(verb_winners, self.areas[VERB].winners)
+		noun_overlap = bu.overlap(noun_winners, self.area_by_name[NOUN].winners)
+		verb_overlap = bu.overlap(verb_winners, self.area_by_name[VERB].winners)
 		print("In NOUN: got " + str(noun_overlap) + " / " + str(len(noun_winners)) + " overlap.")
 		print("In VERB: got " + str(verb_overlap) + " / " + str(len(verb_winners)) + " overlap.")
-		self.no_plasticity = False
+		self.disable_plasticity = False
 
 
 # a brain that assumes single word representations have been learnt (stored in a combined LEX area called NOUN_VERB)
 # and learns 2-word sentence (subject + intransitive verb) sentence word order, including with several moods with different word orders
 # uses the SEQ area mechanism for learning word order statistics
-class SimpleSyntaxBrain(brain.Brain):
+class SimpleSyntaxBrain(brain_alt.Brain):
 	def __init__(self, p, CONTEXTUAL_k=100, EXPLICIT_k=100, beta=0.06, LEX_n=10000, LEX_k=100, proj_rounds=2, CORE_k=10):
-		brain.Brain__init__(self, p)
+		brain_alt.Brain__init__(self, p)
 		# Q: Do we need to "rewire" inside these areas (make the explicit assemblies more highly connected?)
 		self.add_explicit_area(NOUN_VERB, 4*EXPLICIT_k, EXPLICIT_k, beta)
 		# self.add_explicit_area(VERB, 2*EXPLICIT_k, EXPLICIT_k, beta)
@@ -629,12 +631,12 @@ class SimpleSyntaxBrain(brain.Brain):
 			for _ in range(proj_rounds):
 				self.project({}, {NOUN_VERB: [NOUN_VERB, MOTOR, CORE], MOTOR: [NOUN_VERB], CORE: [NOUN_VERB]})
 
-		self.areas[CORE].unfix_assembly()
-		self.areas[NOUN_VERB].unfix_assembly()
+		self.area_by_name[CORE].unfix_assembly()
+		self.area_by_name[NOUN_VERB].unfix_assembly()
 
 	def pre_train_test(self):
-		self.no_plasticity = True
-		self.areas[CORE].unfix_assembly()
+		self.disable_plasticity = True
+		self.area_by_name[CORE].unfix_assembly()
 		for i in [0, 1]:
 			self.activate(NOUN_VERB, i)
 			self.project({}, {NOUN_VERB: [CORE]})
@@ -650,14 +652,14 @@ class SimpleSyntaxBrain(brain.Brain):
 				print("ERROR: a VERB activated the NOUN core")
 				return
 		print("Passed tests from NOUN, VERB -> CORE")
-		self.areas[NOUN_VERB].unfix_assembly()
+		self.area_by_name[NOUN_VERB].unfix_assembly()
 		self.activate(CORE, NOUN_CORE_INDEX)
 		self.project({}, {CORE: [NOUN_VERB]})
 		if self.get_explicit_assembly(NOUN_VERB, min_overlap=0.75):
 			print("ERROR: projecting noun core -> NOUN, VERB gave explicit assembly")
 			return 
-		max_winner = max(self.areas[NOUN_VERB].winners)
-		if  max_winner >= (2 * self.areas[NOUN_VERB].k):
+		max_winner = max(self.area_by_name[NOUN_VERB].winners)
+		if  max_winner >= (2 * self.area_by_name[NOUN_VERB].k):
 			print("ERROR: proecting noun core -> NOUN, VERB yielded winner in verb part")
 		print("Passed noun core -> noun verb, max winner was " + str(max_winner))
 		self.activate(CORE, VERB_CORE_INDEX)
@@ -665,14 +667,14 @@ class SimpleSyntaxBrain(brain.Brain):
 		if self.get_explicit_assembly(NOUN_VERB, min_overlap=0.75):
 			print("ERROR: projecting noun core -> NOUN, VERB gave explicit assembly")
 			return 
-		min_winner = min(self.areas[NOUN_VERB].winners)
-		if  min_winner < (2 * self.areas[NOUN_VERB].k):
+		min_winner = min(self.area_by_name[NOUN_VERB].winners)
+		if  min_winner < (2 * self.area_by_name[NOUN_VERB].k):
 			print("ERROR: proecting noun core -> NOUN, VERB yielded winner in verb part")
 		print("Passed verb core -> noun verb, min winner was " + str(min_winner))
 
-		self.no_plasticity = False
-		self.areas[CORE].unfix_assembly()
-		self.areas[NOUN_VERB].unfix_assembly()
+		self.disable_plasticity = False
+		self.area_by_name[CORE].unfix_assembly()
+		self.area_by_name[NOUN_VERB].unfix_assembly()
 
 
 	# an experiment that trains the brain with 2 word sentences, possibly with 2 different moods / word orders
@@ -686,15 +688,15 @@ class SimpleSyntaxBrain(brain.Brain):
 			return
 		interrogative_sentence = sentence[:]
 		interrogative_sentence.reverse()
-		self.no_plasticity = False
+		self.disable_plasticity = False
 		for _ in range(train_rounds):
 			self.parse(sentence, mood_state=0)
 			if train_interrogative:
 				self.parse(interrogative_sentence, mood_state=1)
 
 		# Test
-		self.no_plasticity = True
-		self.areas[CORE].unfix_assembly()
+		self.disable_plasticity = True
+		self.area_by_name[CORE].unfix_assembly()
 		self.activate(MOOD, 0)
 		self.project({}, {MOOD: [SEQ]})
 		self.project({}, {SEQ: [CORE]})
@@ -713,7 +715,7 @@ class SimpleSyntaxBrain(brain.Brain):
 		
 		if train_interrogative:
 			print("Now testing INTERROGATIVE word order...")
-			self.areas[CORE].unfix_assembly()
+			self.area_by_name[CORE].unfix_assembly()
 			self.activate(MOOD, 1)
 			self.project({}, {MOOD: [SEQ]})
 			self.project({}, {SEQ: [CORE]})
@@ -779,7 +781,7 @@ class LearnBrain_SimpleSyntax(LearnBrain):
 
 	def train_cores(self, rounds=20):
 		# hack to get around common p value in all areas
-		updated_weight = (1+self.areas[CORE].area_beta[NOUN]) ** rounds
+		updated_weight = (1+self.area_by_name[CORE].area_beta[NOUN]) ** rounds
 
 		core_to_noun_shape = ((self.connectomes[CORE][NOUN])[0:self.CORE_k,:]).shape
 		(self.connectomes[CORE][NOUN])[0:self.CORE_k,:] = np.ones(core_to_noun_shape) * updated_weight
@@ -822,7 +824,7 @@ class LearnBrain_Syntax():
 	# DELETE EVENTUALLY
 	def OBJECTS_train_cores(self, rounds=20):
 		# hack to get around common p value in all areas
-		updated_weight = (1+self.areas[CORE].area_beta[NOUN]) ** rounds
+		updated_weight = (1+self.area_by_name[CORE].area_beta[NOUN]) ** rounds
 
 		core_to_noun_shape = ((self.connectomes[CORE][NOUN])[0:self.CORE_k,:]).shape
 		(self.connectomes[CORE][NOUN])[0:self.CORE_k,:] = np.ones(core_to_noun_shape) * updated_weight
@@ -830,12 +832,12 @@ class LearnBrain_Syntax():
 		noun_to_core_shape = ((self.connectomes[NOUN][CORE])[:, 0:self.CORE_k]).shape
 		(self.connectomes[NOUN][CORE])[:, 0:self.CORE_k] = np.ones(noun_to_core_shape) * updated_weight
 
-		self.no_plasticity = True
+		self.disable_plasticity = True
 		# 0 index word is an INTRANSITIVE verb
 		# SECOND core is for intrans verb
 		self.activate(MOTOR, 0)
 		self.project({}, {MOTOR: [VERB]})
-		intrans_verb_assembly = self.areas[VERB].winners[:]
+		intrans_verb_assembly = self.area_by_name[VERB].winners[:]
 		for i in intrans_verb_assembly:
 			(self.connectomes[CORE][VERB])[self.CORE_k:(2*self.CORE_k), i] = updated_weight
 			(self.connectomes[VERB][CORE])[i, self.CORE_k:(2*self.CORE_k)] = updated_weight
@@ -844,7 +846,7 @@ class LearnBrain_Syntax():
 		# THIRD core is for trans verb
 		self.activate(MOTOR, 1)
 		self.project({}, {MOTOR: [VERB]})
-		trans_verb_assembly = self.areas[VERB].winners[:]
+		trans_verb_assembly = self.area_by_name[VERB].winners[:]
 		for i in trans_verb_assembly:
 			(self.connectomes[CORE][VERB])[2*self.CORE_k:, i] = updated_weight
 			(self.connectomes[VERB][CORE])[i, 2*self.CORE_k:] = updated_weight
@@ -852,7 +854,7 @@ class LearnBrain_Syntax():
 		o = bu.overlap(intrans_verb_assembly, trans_verb_assembly, percentage=True)
 		print("Got overlap of trans and intrans assemblies of " + str(o))
 
-		self.no_plasticity = False
+		self.disable_plasticity = False
 
 	# DELETE EVENTUALLY
 	def OBJECTS_train_syntax(train_rounds=20):
@@ -865,14 +867,14 @@ class LearnBrain_Syntax():
 		self.activate(CORE, 1)
 		self.activate(SEQ, 0)
 		self.activate(ROLES, 0)
-		self.no_plasticity = False
+		self.disable_plasticity = False
 		for _ in range(train_rounds):
 			project({}, {CORE: [SEQ], SEQ: [ROLES]})
 		self.activate(CORE, 0)
 		for _ in range(train_rounds):
 			project({}, {SEQ: [CORE]})
 
-		SEQ_updated_weight = (1+self.areas[SEQ].area_beta[SEQ]) ** train_rounds
+		SEQ_updated_weight = (1+self.area_by_name[SEQ].area_beta[SEQ]) ** train_rounds
 		(self.connectomes[SEQ][SEQ])[:self.SEQ_k, self.SEQ_k:(2*self.SEQ_k)] = SEQ_updated_weight
 		self.activate(SEQ, 1)
 		self.activate(CORE, 1)

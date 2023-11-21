@@ -12,9 +12,12 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include "brain_util.h"
 
 namespace nemo {
 namespace {
+
+constexpr int kLogLevel = 0;
 
 void Subsample(std::vector<uint32_t>& activated, float alpha, uint32_t seed) {
   std::mt19937 rng(seed);
@@ -31,42 +34,27 @@ void Subsample(std::vector<uint32_t>& activated, float alpha, uint32_t seed) {
   std::swap(activated, new_activated);
 }
 
-size_t NumCommon(const std::vector<uint32_t>& a_in,
-                 const std::vector<uint32_t>& b_in) {
-  std::vector<uint32_t> a = a_in;
-  std::vector<uint32_t> b = b_in;
-  std::sort(a.begin(), a.end());
-  std::sort(b.begin(), b.end());
-  std::vector<uint32_t> c;
-  std::set_intersection(a.begin(), a.end(), b.begin(), b.end(),
-                        std::back_inserter(c));
-  return c.size();
-}
-
-Brain SetupOneStimulus(uint32_t n, uint32_t k, float p, float beta) {
-  Brain brain(p, beta, 7777);
+Brain SetupOneStimulus(uint32_t n, uint32_t k, float p, float beta,
+                       bool is_explicit = false) {
+  Brain brain(p, beta, 10000.0, 7777);
   brain.AddStimulus("StimA", k);
-  brain.AddArea("A", n, k);
+  brain.AddArea("A", n, k, /*recurrent=*/true, is_explicit);
   brain.AddFiber("StimA", "A");
+  brain.SetLogLevel(kLogLevel);
   return brain;
 }
 
-Brain SetupTwoStimuli(uint32_t n, uint32_t k, float p, float beta) {
-  Brain brain(p, beta, 7777);
+Brain SetupTwoStimuli(uint32_t n, uint32_t k, float p, float beta,
+                      bool is_explicit = false) {
+  Brain brain(p, beta, 10000.0, 7777);
   brain.AddStimulus("StimA", k);
   brain.AddStimulus("StimB", k);
-  brain.AddArea("A", n, k);
-  brain.AddArea("B", n, k);
+  brain.AddArea("A", n, k, /*recurrent=*/true, is_explicit);
+  brain.AddArea("B", n, k, /*recurrent=*/true, is_explicit);
   brain.AddFiber("StimA", "A");
   brain.AddFiber("StimB", "B");
+  brain.SetLogLevel(kLogLevel);
   return brain;
-}
-
-void Simulate(Brain& brain, int steps) {
-  for (int i = 0; i < steps; ++i) {
-    brain.SimulateOneStep();
-    brain.LogGraphStats();
-  }
 }
 
 std::set<std::string> AllAreas(
@@ -81,17 +69,15 @@ std::set<std::string> AllAreas(
   return areas;
 }
 
-void Project(Brain& brain,
-             const std::map<std::string, std::vector<std::string>>& graph,
+void Project(Brain& brain, const ProjectMap& graph,
              int steps, float convergence = 1.0) {
-  brain.InitProjection(graph);
   std::map<std::string, std::vector<uint32_t>> prev_activated;
   std::set<std::string> all_areas = AllAreas(graph);
-  Simulate(brain, steps - 1);
+  brain.Project(graph, steps - 1);
   for (const auto& area_name : all_areas) {
     prev_activated[area_name] = brain.GetArea(area_name).activated;
   }
-  Simulate(brain, 1);
+  brain.SimulateOneStep();
   for (const auto& area_name : all_areas) {
     const Area& area = brain.GetArea(area_name);
     ASSERT_GE(NumCommon(area.activated, prev_activated[area_name]),
@@ -101,13 +87,17 @@ void Project(Brain& brain,
 
 TEST(BrainTest, TestProjection) {
   Brain brain = SetupOneStimulus(1000000, 1000, 0.001, 0.05);
-  brain.LogGraphStats();
+  Project(brain, {{"StimA", {"A"}}, {"A", {"A"}}}, 25, 0.999);
+}
+
+TEST(BrainTest, TestExplicitProjection) {
+  Brain brain = SetupOneStimulus(250000, 500, 0.01, 0.05,
+                                 /*is_explicit=*/true);
   Project(brain, {{"StimA", {"A"}}, {"A", {"A"}}}, 25);
 }
 
 TEST(BrainTest, TestCompletion) {
   Brain brain = SetupOneStimulus(100000, 317, 0.05, 0.05);
-  brain.LogGraphStats();
   Project(brain, {{"StimA", {"A"}}, {"A", {"A"}}}, 25);
   std::vector<uint32_t> prev_assembly = brain.GetArea("A").activated;
   // Recude A's assembly by half.
@@ -124,7 +114,6 @@ TEST(BrainTest, TestAssociation) {
   brain.AddArea("C", n, k);
   brain.AddFiber("A", "C");
   brain.AddFiber("B", "C");
-  brain.LogGraphStats();
 
   Project(brain,
           {{"StimA", {"A"}}, {"StimB", {"B"}}, {"A", {"A"}}, {"B", {"B"}}}, 10);
@@ -175,11 +164,8 @@ TEST(BrainTest, TestMerge) {
   const int k = 317;
   Brain brain = SetupTwoStimuli(n, k, 0.01, 0.05);
   brain.AddArea("C", n, k);
-  brain.AddFiber("A", "C");
-  brain.AddFiber("B", "C");
-  brain.AddFiber("C", "A");
-  brain.AddFiber("C", "B");
-  brain.LogGraphStats();
+  brain.AddFiber("A", "C", /*bidirectional=*/true);
+  brain.AddFiber("B", "C", /*bidirectional=*/true);
 
   Project(brain,
           {{"StimA", {"A"}}, {"StimB", {"B"}},

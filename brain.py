@@ -363,6 +363,9 @@ class Brain:
         print(f"{total_k=} and {input_size_by_from_area_index=}")
 
       effective_n = target_area.n - target_area.w
+      if effective_n <= target_area.k:
+      	raise RuntimeError(
+      	    f'Remaining size of area "{target_area_name}" too small to sample k new winners.')
       # Threshold for inputs that are above (n-k)/n quantile.
       quantile = (effective_n - target_area.k) / effective_n
       if False:
@@ -461,14 +464,14 @@ class Brain:
       # for i in repeat_winners, stimulus_inputs[i] *= (1+beta)
     num_inputs_processed = 0
     for stim in from_stimuli:
-      connectome = self.connectomes_by_stimulus[stim]
+      connectomes = self.connectomes_by_stimulus[stim]
       if num_first_winners_processed > 0:
-        connectome[target_area_name] = target_connectome = np.resize(
-            connectome[target_area_name],
-            target_area.w + num_first_winners_processed)
+        connectomes[target_area_name] = target_connectome = np.resize(
+            connectomes[target_area_name],
+            target_area._new_w)
       else:
-        target_connectome = connectome[target_area_name]
-      first_winner_synapses = connectome[target_area_name][target_area.w:]
+        target_connectome = connectomes[target_area_name]
+      first_winner_synapses = target_connectome[target_area.w:]
       for i in range(num_first_winners_processed):
         first_winner_synapses[i] = (
             inputs_by_first_winner_index[i][num_inputs_processed])
@@ -482,11 +485,17 @@ class Brain:
         print(self.connectomes_by_stimulus[stim][target_area_name])
       num_inputs_processed += 1
 
-    # !!!!!!!!!!!!!!!!
-    # BIG TO DO: Need to update connectomes for stim that are NOT in
-    # from_stimuli
-    # For example, if last round fired areas A->B, and stim has never been
-    # fired into B.
+    # update connectomes from stimuli that were not fired this round into the area.
+    if (not target_area.explicit) and (num_first_winners_processed > 0):
+	    for stim_name, connectomes in self.connectomes_by_stimulus.items():
+	        if stim_name in from_stimuli:
+	    	    continue
+	        connectomes[target_area_name] = the_connectome = np.resize(
+	    		connectomes[target_area_name],
+	    		target_area._new_w)
+	        the_connectome[target_area.w:] = rng.binomial(
+                1, self.p,
+                size=(num_first_winners_processed))
 
     # connectome for each in_area->area
       # add num_first_winners_processed columns

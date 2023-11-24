@@ -441,7 +441,7 @@ void Brain::ChooseSynapsesFromNonActivated(const Area& area,
     } else {
       uint32_t population = from_area.support - num_activated;
       std::binomial_distribution<> binom(population, p_);
-      std::uniform_int_distribution<> u(0, population - 1);
+      std::uniform_int_distribution<> u(0, from_area.support - 1);
       size_t num_synapses = binom(rng_);
       for (size_t i = 0; i < num_synapses; ++i) {
         for (;;) {

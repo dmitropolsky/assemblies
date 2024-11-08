@@ -330,6 +330,7 @@ class Brain:
 
     # For experiments with a "fixed" assembly in some area.
     if target_area.fixed_assembly:
+      target_area_name = target_area.name
       target_area._new_winners = target_area.winners
       target_area._new_w = target_area.w
       first_winner_inputs = []
@@ -406,9 +407,14 @@ class Brain:
 	        mu = total_k * self.p
 	        std = math.sqrt(total_k * self.p * (1.0 - self.p))
 	      a = (alpha - mu) / std
-	      b = (total_k - mu) / std
-	      potential_new_winner_inputs = (mu + truncnorm.rvs(
-	        a, b, scale=std, size=target_area.k)).round(0)
+	      # instead of np.inf below, could use b = (total_k - mu) / std
+        # then you don't need the logic immediately after which sets the sample to total_k if the
+        # truncnorm approximation gave something > total_k
+        # however, this may be less likely to sample large inputs than the true binomial distribution
+	      potential_new_winner_inputs = (mu + truncnorm.rvs(a, np.inf, scale=std, size=target_area.k)).round(0)
+	      for i in range(len(potential_new_winner_inputs)):
+	        if potential_new_winner_inputs[i] > total_k:
+	          potential_new_winner_inputs[i] = total_k
 
 	      if verbose >= 2:
 	        print(f"potential_new_winner_inputs: {potential_new_winner_inputs}")

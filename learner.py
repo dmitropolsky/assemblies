@@ -1,4 +1,4 @@
-import brain_alt
+import brain
 import brain_util as bu
 import numpy as np
 import random
@@ -20,8 +20,6 @@ import random
 
 # example with extra context areas
 # brain = learner.LearnBrain(0.05, LEX_k=100, PHON_k=100, CONTEXTUAL_k=100, LEX_n=100000, extra_context_area_k=20, num_nouns=2, num_verbs=2, extra_context_model="C"", beta=0.06)
-
-# brain = learner.LearnBrain(0.05, LEX_k=50, PHON_k=50, num_nouns=8, num_verbs=8)
 
 # Simple syntax experiment (skips individual word semantics acquisition)
 # brain = learner.SimpleSyntaxBrain(0.1)
@@ -164,10 +162,10 @@ def single_word_tutoring_exp(lex_size_start, lex_size_end, p=0.05, LEX_k=50, LEX
 	return results
 
 
-class LearnBrain(brain_alt.Brain):
+class LearnBrain(brain.Brain):
 	def __init__(self, p, PHON_k=100, CONTEXTUAL_k=100, EXPLICIT_k=100, LEX_k=100, LEX_n=10000, beta=0.06, proj_rounds=2,
 		CORE_k=10, bilingual=False, LANG_k=100, num_nouns=2, num_verbs=2, extra_context_areas=0, extra_context_area_k=10, extra_context_model="B", extra_context_delay=0):
-		brain_alt.Brain.__init__(self, p)
+		brain.Brain.__init__(self, p)
 		self.bilingual = bilingual
 
 		# make this sum of #verbs + #nouns, more easily adjustable
@@ -564,9 +562,9 @@ class LearnBrain(brain_alt.Brain):
 # a brain that assumes single word representations have been learnt (stored in a combined LEX area called NOUN_VERB)
 # and learns 2-word sentence (subject + intransitive verb) sentence word order, including with several moods with different word orders
 # uses the SEQ area mechanism for learning word order statistics
-class SimpleSyntaxBrain(brain_alt.Brain):
+class SimpleSyntaxBrain(brain.Brain):
 	def __init__(self, p, CONTEXTUAL_k=100, EXPLICIT_k=100, beta=0.06, LEX_n=10000, LEX_k=100, proj_rounds=2, CORE_k=10):
-		brain_alt.Brain__init__(self, p)
+		brain.Brain__init__(self, p)
 		# Q: Do we need to "rewire" inside these areas (make the explicit assemblies more highly connected?)
 		self.add_explicit_area(NOUN_VERB, 4*EXPLICIT_k, EXPLICIT_k, beta)
 		# self.add_explicit_area(VERB, 2*EXPLICIT_k, EXPLICIT_k, beta)
